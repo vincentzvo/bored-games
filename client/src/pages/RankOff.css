@@ -7,6 +7,19 @@
     gap: 1rem;
 }
 
+.box-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.box-number {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ffffff;
+}
+
 .draggable-box {
     width: 150px;
     height: 150px;
@@ -20,6 +33,15 @@
     cursor: grab;
     user-select: none;
     transition: transform 0.2s, box-shadow 0.2s;
+    overflow: hidden;
+    background-color: #f0f0f0;
+}
+
+.box-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
 }
 
 .draggable-box:active {
