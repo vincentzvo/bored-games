@@ -4,13 +4,14 @@ import './RankOff.css'
 
 function RankOff() {
   const navigate = useNavigate()
-  const { category } = useParams()
+  const { roomCode, category } = useParams()
   const [boxes, setBoxes] = useState([])
   const [draggedIndex, setDraggedIndex] = useState(null)
   
   useEffect(() => {
-    // Fetch random images from backend based on category
-    fetch(`http://localhost:3001/api/random-images/${category}`)
+    // Fetch random images from backend based on room and category
+    // This ensures all players in the room get the same images
+    fetch(`http://localhost:3001/api/room/${roomCode}/images/${category}`)
       .then(res => res.json())
       .then(images => {
         const boxData = images.map((imagePath, index) => ({
@@ -20,7 +21,7 @@ function RankOff() {
         setBoxes(boxData);
       })
       .catch(err => console.error('Error fetching images:', err));
-  }, [category])
+  }, [roomCode, category])
   
   const handleDragStart = (index) => {
     setDraggedIndex(index)

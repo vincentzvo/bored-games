@@ -58,7 +58,68 @@ app.delete('/api/room/:roomCode', (req, res) => {
   }
 });
 
-// Get random images endpoint
+// Get random images for a room/category (generates and stores them)
+app.get('/api/room/:roomCode/images/:category', (req, res) => {
+  const { roomCode, category } = req.params;
+  const imagesDir = path.join(__dirname, 'images');
+  
+  if (!fs.existsSync(imagesDir)) {
+    return res.json([]);
+  }
+  
+  // Check if room exists and already has images for this category
+  if (rooms.has(roomCode)) {
+    const room = rooms.get(roomCode);
+    if (room.images && room.images.category === category) {
+      // Return existing images
+      return res.json(room.images.files);
+    }
+  }
+  
+  let allFiles = [];
+  
+  if (category === 'random') {
+    // Get images from all subdirectories
+    const subdirs = fs.readdirSync(imagesDir)
+      .filter(item => fs.statSync(path.join(imagesDir, item)).isDirectory());
+    
+    subdirs.forEach(subdir => {
+      const subdirPath = path.join(imagesDir, subdir);
+      const files = fs.readdirSync(subdirPath)
+        .filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file))
+        .map(file => `/images/${subdir}/${file}`);
+      allFiles = allFiles.concat(files);
+    });
+  } else {
+    // Get images from specific category folder
+    const categoryDir = path.join(imagesDir, category);
+    
+    if (!fs.existsSync(categoryDir)) {
+      return res.json([]);
+    }
+    
+    allFiles = fs.readdirSync(categoryDir)
+      .filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file))
+      .map(file => `/images/${category}/${file}`);
+  }
+  
+  // Shuffle and pick 5 random images
+  const shuffled = allFiles.sort(() => 0.5 - Math.random());
+  const selected = shuffled.slice(0, 5);
+  
+  // Store images in room
+  if (rooms.has(roomCode)) {
+    const room = rooms.get(roomCode);
+    room.images = {
+      category,
+      files: selected
+    };
+  }
+  
+  res.json(selected);
+});
+
+// Old endpoint for backward compatibility
 app.get('/api/random-images/:category', (req, res) => {
   const { category } = req.params;
   const imagesDir = path.join(__dirname, 'images');
@@ -128,6 +189,13 @@ io.on('connection', (socket) => {
     console.log(`Game ${gameId} selected in room ${roomCode}`);
     // Broadcast to all clients in the room
     io.to(roomCode).emit('navigate-to-game', { gameId });
+  });
+
+  // Handle category selection
+  socket.on('category-selected', ({ roomCode, category }) => {
+    console.log(`Category ${category} selected in room ${roomCode}`);
+    // Broadcast to all clients in the room
+    io.to(roomCode).emit('navigate-to-category', { category });
   });
 
   // Leave room
