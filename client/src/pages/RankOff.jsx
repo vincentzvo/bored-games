@@ -46,11 +46,6 @@ function RankOff() {
   return (
     <div>
       <h1>Rank Off</h1>
-      <div className="card">
-        <button onClick={() => navigate('/')}>
-        	Home
-        </button>
-      </div>
       
       <div className="box-container">
         {boxes.map((box, index) => (
