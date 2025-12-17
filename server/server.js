@@ -20,6 +20,44 @@ app.use('/images', express.static(path.join(__dirname, 'images')));
 
 const PORT = process.env.PORT || 3001;
 
+// Store active rooms and players
+const rooms = new Map();
+
+// Check if room exists endpoint
+app.get('/api/room/:roomCode/exists', (req, res) => {
+  const { roomCode } = req.params;
+  const exists = rooms.has(roomCode);
+  res.json({ exists });
+});
+
+// Create room endpoint
+app.post('/api/room/:roomCode/create', (req, res) => {
+  const { roomCode } = req.params;
+  
+  if (!rooms.has(roomCode)) {
+    rooms.set(roomCode, {
+      code: roomCode,
+      players: [],
+      createdAt: new Date()
+    });
+    res.json({ success: true, room: rooms.get(roomCode) });
+  } else {
+    res.status(409).json({ success: false, message: 'Room already exists' });
+  }
+});
+
+// Delete room endpoint
+app.delete('/api/room/:roomCode', (req, res) => {
+  const { roomCode } = req.params;
+  
+  if (rooms.has(roomCode)) {
+    rooms.delete(roomCode);
+    res.json({ success: true, message: 'Room deleted' });
+  } else {
+    res.status(404).json({ success: false, message: 'Room not found' });
+  }
+});
+
 // Get random images endpoint
 app.get('/api/random-images/:category', (req, res) => {
   const { category } = req.params;
@@ -63,17 +101,64 @@ app.get('/api/random-images/:category', (req, res) => {
   res.json(selected);
 });
 
-// Store active rooms and players
-const rooms = new Map();
-
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
 
-  // Handle socket events here
-  // Example: joining a room, making moves, etc.
+  // Join a room
+  socket.on('join-room', (roomCode) => {
+    socket.join(roomCode);
+    console.log(`Socket ${socket.id} joined room ${roomCode}`);
+    
+    // Update room with player info
+    if (rooms.has(roomCode)) {
+      const room = rooms.get(roomCode);
+      if (!room.players.includes(socket.id)) {
+        room.players.push(socket.id);
+      }
+      
+      // Notify all players in room about player count
+      io.to(roomCode).emit('room-update', {
+        playerCount: room.players.length
+      });
+    }
+  });
+
+  // Handle game selection
+  socket.on('game-selected', ({ roomCode, gameId }) => {
+    console.log(`Game ${gameId} selected in room ${roomCode}`);
+    // Broadcast to all clients in the room
+    io.to(roomCode).emit('navigate-to-game', { gameId });
+  });
+
+  // Leave room
+  socket.on('leave-room', (roomCode) => {
+    socket.leave(roomCode);
+    console.log(`Socket ${socket.id} left room ${roomCode}`);
+    
+    // Remove player from room
+    if (rooms.has(roomCode)) {
+      const room = rooms.get(roomCode);
+      room.players = room.players.filter(id => id !== socket.id);
+      
+      // Notify remaining players
+      io.to(roomCode).emit('room-update', {
+        playerCount: room.players.length
+      });
+    }
+  });
   
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
+    
+    // Remove from all rooms
+    rooms.forEach((room, roomCode) => {
+      if (room.players.includes(socket.id)) {
+        room.players = room.players.filter(id => id !== socket.id);
+        io.to(roomCode).emit('room-update', {
+          playerCount: room.players.length
+        });
+      }
+    });
   });
 });
 
