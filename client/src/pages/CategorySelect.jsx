@@ -1,8 +1,9 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import './CategorySelect.css'
 
 function CategorySelect() {
   const navigate = useNavigate()
+  const { roomCode } = useParams()
   
   const categories = [
     { id: 'animals', name: 'Animals' },
@@ -13,7 +14,7 @@ function CategorySelect() {
   ]
   
   const handleCategorySelect = (categoryId) => {
-    navigate(`/rank-off/${categoryId}`)
+    navigate(`/room/${roomCode}/rank-off/${categoryId}`)
   }
   
   return (
@@ -30,8 +31,8 @@ function CategorySelect() {
           </button>
         ))}
       </div>
-      <button className="back-button" onClick={() => navigate('/')}>
-        Back to Home
+      <button className="back-button" onClick={() => navigate(`/room/${roomCode}`)}>
+        Back to Game Select
       </button>
     </div>
   )
