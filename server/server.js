@@ -58,6 +58,46 @@ app.delete('/api/room/:roomCode', (req, res) => {
   }
 });
 
+// Submit ranking endpoint
+app.post('/api/room/:roomCode/submit-ranking', (req, res) => {
+  const { roomCode } = req.params;
+  const { playerId, ranking } = req.body;
+  
+  if (!rooms.has(roomCode)) {
+    return res.status(404).json({ success: false, message: 'Room not found' });
+  }
+  
+  const room = rooms.get(roomCode);
+  
+  // Initialize rankings array if it doesn't exist
+  if (!room.rankings) {
+    room.rankings = [];
+  }
+  
+  // Check if player already submitted, update if so
+  const existingRankingIndex = room.rankings.findIndex(r => r.playerId === playerId);
+  
+  if (existingRankingIndex >= 0) {
+    room.rankings[existingRankingIndex] = {
+      playerId,
+      ranking,
+      submittedAt: new Date()
+    };
+  } else {
+    room.rankings.push({
+      playerId,
+      ranking,
+      submittedAt: new Date()
+    });
+  }
+  
+  res.json({ 
+    success: true, 
+    message: 'Ranking submitted',
+    totalSubmissions: room.rankings.length
+  });
+});
+
 // Get random images for a room/category (generates and stores them)
 app.get('/api/room/:roomCode/images/:category', (req, res) => {
   const { roomCode, category } = req.params;

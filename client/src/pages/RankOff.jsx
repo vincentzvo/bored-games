@@ -7,6 +7,16 @@ function RankOff() {
   const { roomCode, category } = useParams()
   const [boxes, setBoxes] = useState([])
   const [draggedIndex, setDraggedIndex] = useState(null)
+  const [submitted, setSubmitted] = useState(false)
+  const [playerId] = useState(() => {
+    // Generate unique player ID if not exists
+    let id = localStorage.getItem('playerId')
+    if (!id) {
+      id = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      localStorage.setItem('playerId', id)
+    }
+    return id
+  })
   
   useEffect(() => {
     // Fetch random images from backend based on room and category
@@ -24,15 +34,17 @@ function RankOff() {
   }, [roomCode, category])
   
   const handleDragStart = (index) => {
+    if (submitted) return
     setDraggedIndex(index)
   }
   
   const handleDragOver = (e) => {
+    if (submitted) return
     e.preventDefault()
   }
   
   const handleDrop = (dropIndex) => {
-    if (draggedIndex === null) return
+    if (submitted || draggedIndex === null) return
     
     const newBoxes = [...boxes]
     const draggedBox = newBoxes[draggedIndex]
@@ -43,6 +55,33 @@ function RankOff() {
     setDraggedIndex(null)
   }
   
+  const handleSubmit = async () => {
+    // Create ranking array with image IDs in order
+    const ranking = boxes.map(box => box.image)
+    
+    try {
+      const response = await fetch(`http://localhost:3001/api/room/${roomCode}/submit-ranking`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          playerId,
+          ranking
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setSubmitted(true)
+        console.log('Ranking submitted successfully')
+      }
+    } catch (err) {
+      console.error('Error submitting ranking:', err)
+    }
+  }
+  
   return (
     <div>
       <h1>Rank Off</h1>
@@ -51,8 +90,8 @@ function RankOff() {
         {boxes.map((box, index) => (
           <div key={box.id} className="box-wrapper">
             <div
-              className="draggable-box"
-              draggable
+              className={`draggable-box ${submitted ? 'disabled' : ''}`}
+              draggable={!submitted}
               onDragStart={() => handleDragStart(index)}
               onDragOver={handleDragOver}
               onDrop={() => handleDrop(index)}
@@ -62,6 +101,16 @@ function RankOff() {
             <div className="box-number">{index + 1}</div>
           </div>
         ))}
+      </div>
+      
+      <div className="submit-container">
+        <button 
+          className="submit-button" 
+          onClick={handleSubmit}
+          disabled={submitted}
+        >
+          {submitted ? 'Submitted ✓' : 'Submit Ranking'}
+        </button>
       </div>
     </div>
   )
