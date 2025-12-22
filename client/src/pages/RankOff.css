@@ -7,6 +7,13 @@
     gap: 1rem;
 }
 
+.phase-instructions {
+    text-align: center;
+    font-size: 1.1rem;
+    color: #888;
+    margin: 1rem 0 2rem 0;
+}
+
 .box-wrapper {
     display: flex;
     flex-direction: column;

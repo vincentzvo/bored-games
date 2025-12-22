@@ -61,7 +61,7 @@ app.delete('/api/room/:roomCode', (req, res) => {
 // Submit ranking endpoint
 app.post('/api/room/:roomCode/submit-ranking', (req, res) => {
   const { roomCode } = req.params;
-  const { playerId, ranking } = req.body;
+  const { playerId, ranking, phase } = req.body; // phase: 'original' or 'guess'
   
   if (!rooms.has(roomCode)) {
     return res.status(404).json({ success: false, message: 'Room not found' });
@@ -69,32 +69,58 @@ app.post('/api/room/:roomCode/submit-ranking', (req, res) => {
   
   const room = rooms.get(roomCode);
   
-  // Initialize rankings array if it doesn't exist
-  if (!room.rankings) {
-    room.rankings = [];
+  // Initialize submissions object if it doesn't exist
+  if (!room.submissions) {
+    room.submissions = {
+      original: [],
+      guess: []
+    };
   }
   
-  // Check if player already submitted, update if so
-  const existingRankingIndex = room.rankings.findIndex(r => r.playerId === playerId);
+  const submissionType = phase || 'original';
+  const submissions = room.submissions[submissionType];
   
-  if (existingRankingIndex >= 0) {
-    room.rankings[existingRankingIndex] = {
+  console.log(`Before submission - Room ${roomCode}, Phase: ${submissionType}, Player: ${playerId}`);
+  console.log(`Current submissions in this phase:`, submissions.map(s => s.playerId));
+  
+  // Check if player already submitted, update if so
+  const existingIndex = submissions.findIndex(r => r.playerId === playerId);
+  
+  if (existingIndex >= 0) {
+    console.log(`Player ${playerId} is updating their existing submission at index ${existingIndex}`);
+    submissions[existingIndex] = {
       playerId,
       ranking,
       submittedAt: new Date()
     };
   } else {
-    room.rankings.push({
+    console.log(`Player ${playerId} is submitting for the first time`);
+    submissions.push({
       playerId,
       ranking,
       submittedAt: new Date()
     });
   }
   
+  console.log(`After submission - Total submissions: ${submissions.length}`);
+  console.log(`All player IDs in this phase:`, submissions.map(s => s.playerId));
+  
+  // Check if both players submitted for this phase
+  const bothSubmitted = submissions.length >= 2;
+  
+  console.log(`Room ${roomCode} - Phase: ${submissionType}, Submissions: ${submissions.length}, Both submitted: ${bothSubmitted}`);
+  
+  // Emit socket event if both submitted
+  if (bothSubmitted) {
+    console.log(`Emitting both-players-submitted event to room ${roomCode} for phase ${submissionType}`);
+    io.to(roomCode).emit('both-players-submitted', { phase: submissionType });
+  }
+  
   res.json({ 
     success: true, 
     message: 'Ranking submitted',
-    totalSubmissions: room.rankings.length
+    totalSubmissions: submissions.length,
+    bothSubmitted
   });
 });
 

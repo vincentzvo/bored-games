@@ -1,20 +1,25 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import io from 'socket.io-client'
 import './RankOff.css'
 
 function RankOff() {
   const navigate = useNavigate()
   const { roomCode, category } = useParams()
   const [boxes, setBoxes] = useState([])
+  const initialBoxesRef = useRef([])
   const [draggedIndex, setDraggedIndex] = useState(null)
   const [submitted, setSubmitted] = useState(false)
+  const [phase, setPhase] = useState('original') // 'original' or 'guess'
+  const [socket, setSocket] = useState(null)
   const [playerId] = useState(() => {
-    // Generate unique player ID if not exists
-    let id = localStorage.getItem('playerId')
+    // Generate unique player ID per session (not shared across tabs)
+    let id = sessionStorage.getItem('playerId')
     if (!id) {
       id = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      localStorage.setItem('playerId', id)
+      sessionStorage.setItem('playerId', id)
     }
+    console.log('Player ID:', id)
     return id
   })
   
@@ -29,9 +34,41 @@ function RankOff() {
           image: `http://localhost:3001${imagePath}`
         }));
         setBoxes(boxData);
+        initialBoxesRef.current = boxData; // Store initial order in ref
       })
       .catch(err => console.error('Error fetching images:', err));
   }, [roomCode, category])
+  
+  useEffect(() => {
+    // Connect to Socket.IO server
+    const newSocket = io('http://localhost:3001')
+    
+    // Join the room
+    newSocket.emit('join-room', roomCode)
+    console.log('RankOff: Joined room', roomCode)
+    
+    // Listen for both players submitting
+    newSocket.on('both-players-submitted', ({ phase: submittedPhase }) => {
+      console.log('RankOff: Socket event received - both-players-submitted for phase:', submittedPhase)
+      
+      if (submittedPhase === 'original') {
+        console.log('RankOff: Resetting to guess phase')
+        // Use functional updates to avoid stale closures
+        setPhase(() => 'guess')
+        setSubmitted(() => false)
+        setBoxes(() => [...initialBoxesRef.current])
+      }
+    })
+    
+    setSocket(newSocket)
+    
+    // Cleanup on unmount
+    return () => {
+      console.log('RankOff: Cleaning up socket')
+      newSocket.emit('leave-room', roomCode)
+      newSocket.disconnect()
+    }
+  }, [roomCode])
   
   const handleDragStart = (index) => {
     if (submitted) return
@@ -58,6 +95,7 @@ function RankOff() {
   const handleSubmit = async () => {
     // Create ranking array with image IDs in order
     const ranking = boxes.map(box => box.image)
+    const currentPhase = phase // Capture current phase
     
     try {
       const response = await fetch(`http://localhost:3001/api/room/${roomCode}/submit-ranking`, {
@@ -67,24 +105,54 @@ function RankOff() {
         },
         body: JSON.stringify({
           playerId,
-          ranking
+          ranking,
+          phase: currentPhase // Send the phase we're submitting for
         })
       })
       
       const data = await response.json()
       
       if (data.success) {
-        setSubmitted(true)
-        console.log('Ranking submitted successfully')
+        // Only set submitted if we're still in the same phase
+        setPhase(p => {
+          if (p === currentPhase) {
+            setSubmitted(true)
+            if (currentPhase === 'guess') {
+              console.log('Guess submitted successfully')
+            } else {
+              console.log('Original ranking submitted successfully')
+            }
+          } else {
+            console.log(`Submission response received for ${currentPhase} but already moved to ${p}, ignoring`)
+          }
+          return p
+        })
       }
     } catch (err) {
       console.error('Error submitting ranking:', err)
     }
   }
   
+  const getPhaseText = () => {
+    if (phase === 'original') {
+      return submitted ? 'Waiting for other player...' : 'Submit Your Ranking'
+    } else {
+      return submitted ? 'Guess Submitted ✓' : 'Submit Your Guess'
+    }
+  }
+  
+  const getInstructions = () => {
+    if (phase === 'original') {
+      return 'Rank these items from 1 (best) to 5 (worst)'
+    } else {
+      return 'Guess how the other player ranked these items'
+    }
+  }
+  
   return (
     <div>
       <h1>Rank Off</h1>
+      <p className="phase-instructions">{getInstructions()}</p>
       
       <div className="box-container">
         {boxes.map((box, index) => (
@@ -109,7 +177,7 @@ function RankOff() {
           onClick={handleSubmit}
           disabled={submitted}
         >
-          {submitted ? 'Submitted ✓' : 'Submit Ranking'}
+          {getPhaseText()}
         </button>
       </div>
     </div>
